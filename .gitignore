@@ -1,5 +1,7 @@
 node_modules
-.wwebjs_cache
+auth
 .env
+auth
+
 
 
