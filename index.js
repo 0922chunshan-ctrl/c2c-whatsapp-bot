@@ -90,10 +90,11 @@ function getDeliveryInfo() {
 
 async function sendImageMessage(sock, messageText) {
   await sock.sendMessage(GROUP_ID, {
-    text: messageText
+    image: { url: IMAGE_PATH },
+    caption: messageText
   });
 
-  console.log('📤 Message sent');
+  console.log('📤 Image + message sent');
 }
 
 
