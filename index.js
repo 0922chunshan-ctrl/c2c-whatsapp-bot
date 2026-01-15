@@ -175,7 +175,8 @@ async function startBot() {
 
     if (qr) {
       console.log('📱 Scan QR code:');
-      qrcode.generate(qr, { small: false });
+      console.log('🔗 QR STRING (copy this):');
+      console.log(qr);
     }
 
     if (connection === 'open') {
