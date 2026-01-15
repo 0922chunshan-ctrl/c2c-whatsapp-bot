@@ -20,19 +20,15 @@ const IMAGE_PATH = path.join(__dirname, 'reminder.jpg');
 
 const messages = {
   tueFriReminder: (day, dateStr) =>
-`Hello everyone! 👋🏻
-
-Our delivery service will be available again on *${day}* ! 🚚✨
+`Our delivery service will be available again on *${day}* (${dateStr}) 🚚✨
 You can start placing your orders from now until *3:00 PM* tomorrow for your favourite meals.
-
-📅 *Delivery date:* ${dateStr}
 
 *Kind reminders:*
 - Please set your pick-up time between *5:00 PM – 5:15 PM*
 - Collect your delivered food at *KY’s main gate*  
-  (wait for admin updates in the WhatsApp group)
+  (wait for updates in the group)
 
-Don’t miss out — place your order now! 🍴`,
+https://crave2cave.vercel.app/`,
 
   oneHourLeft: () =>
 `⏰ *1 HOUR LEFT!*
@@ -48,30 +44,25 @@ Make sure to place your orders before *3:00 PM* if you haven’t yet! 🍕🍔�
 
 function getTodayType() {
   const day = new Date().getDay();
-  // 0 Sun, 1 Mon, 2 Tue, 3 Wed, 4 Thu, 5 Fri, 6 Sat
 
-  if ([6, 0, 1].includes(day)) return 'TUESDAY_REMINDER';
-  if (day === 2) return 'TUESDAY_URGENT';
-  if ([3, 4].includes(day)) return 'FRIDAY_REMINDER';
-  if (day === 5) return 'FRIDAY_URGENT';
+  // Reminder days
+  if (day === 1) return 'TUE_REMINDER'; // Monday
+  if (day === 4) return 'FRI_REMINDER'; // Thursday
+  if (day === 5) return 'SAT_REMINDER'; // Friday night handled by scheduler time
+
+  // Urgent delivery days
+  if (day === 2) return 'TUE_URGENT';   // Tuesday
+  if (day === 5) return 'FRI_URGENT';   // Friday
+  if (day === 6) return 'SAT_URGENT';   // Saturday
 
   return null;
 }
 
-function getDeliveryInfo() {
+function getDeliveryInfo(targetDay) {
   const today = new Date();
-  const day = today.getDay();
+  const deliveryDate = new Date(today);
 
-  let deliveryDate = new Date(today);
-
-  // If reminder days → next delivery day
-  if ([6, 0, 1].includes(day)) {
-    // Sat, Sun, Mon → Tuesday
-    deliveryDate.setDate(today.getDate() + ((2 - day + 7) % 7));
-  } else if ([3, 4].includes(day)) {
-    // Wed, Thu → Friday
-    deliveryDate.setDate(today.getDate() + ((5 - day + 7) % 7));
-  }
+  deliveryDate.setDate(today.getDate() + ((targetDay - today.getDay() + 7) % 7));
 
   const dayName = deliveryDate.toLocaleDateString('en-MY', { weekday: 'long' });
   const dateStr = deliveryDate.toLocaleDateString('en-MY', {
@@ -108,13 +99,18 @@ function scheduleDailyMessage(sock) {
 
   let type = getTodayType();
 
-  // Default 9 AM
-  target.setHours(9, 0, 0, 0);
+  // Default reminder time → 10:25 AM
+target.setHours(24, 0, 0, 0);
 
-  // Urgent messages at 2 PM
-  if (type === 'TUESDAY_URGENT' || type === 'FRIDAY_URGENT') {
-    target.setHours(14, 0, 0, 0);
-  }
+// Friday night reminder for Saturday delivery → 9:00 PM
+if (type === 'SAT_REMINDER') {
+  target.setHours(21, 0, 0, 0);
+}
+
+// Urgent reminders → 1:45 PM
+if (type === 'TUE_URGENT' || type === 'FRI_URGENT' || type === 'SAT_URGENT') {
+  target.setHours(13, 45, 0, 0);
+}
 
   if (now > target) {
     target.setDate(target.getDate() + 1);
@@ -126,23 +122,30 @@ function scheduleDailyMessage(sock) {
     try {
       const todayType = getTodayType();
 
-      if (todayType === 'TUESDAY_REMINDER') {
-        const { dayName, dateStr } = getDeliveryInfo();
-      await sendImageMessage(
-        sock,
-        messages.tueFriReminder(dayName, dateStr)
-      );
+      // Monday → Tuesday delivery
+      if (todayType === 'TUE_REMINDER') {
+        const { dayName, dateStr } = getDeliveryInfo(2);
+        await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
       }
 
-      if (todayType === 'FRIDAY_REMINDER') {
-        const { dayName, dateStr } = getDeliveryInfo();
-        await sendImageMessage(
-          sock,
-          messages.tueFriReminder(dayName, dateStr)
-        );
+      // Thursday → Friday delivery
+      if (todayType === 'FRI_REMINDER') {
+        const { dayName, dateStr } = getDeliveryInfo(5);
+        await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
       }
 
-      if (todayType === 'TUESDAY_URGENT' || todayType === 'FRIDAY_URGENT') {
+      // Friday night → Saturday delivery
+      if (todayType === 'SAT_REMINDER') {
+        const { dayName, dateStr } = getDeliveryInfo(6);
+        await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+      }
+
+      // Urgent reminders
+      if (
+        todayType === 'TUE_URGENT' ||
+        todayType === 'FRI_URGENT' ||
+        todayType === 'SAT_URGENT'
+      ) {
         await sendImageMessage(sock, messages.oneHourLeft());
       }
 
@@ -172,7 +175,7 @@ async function startBot() {
 
     if (qr) {
       console.log('📱 Scan QR code:');
-      qrcode.generate(qr, { small: true });
+      qrcode.generate(qr, { small: false });
     }
 
     if (connection === 'open') {
