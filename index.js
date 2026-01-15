@@ -100,7 +100,7 @@ function scheduleDailyMessage(sock) {
   let type = getTodayType();
 
   // Default reminder time → 10:25 AM
-target.setHours(24, 0, 0, 0);
+target.setHours(23, 58, 0, 0);
 
 // Friday night reminder for Saturday delivery → 9:00 PM
 if (type === 'SAT_REMINDER') {
