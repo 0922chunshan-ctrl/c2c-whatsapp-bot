@@ -181,12 +181,9 @@ async function startBot() {
 
     if (connection === 'open') {
       console.log('✅ WhatsApp connected');
-
-      // ✅ ADD TEST MESSAGE HERE
-      await sendImageMessage(sock, '✅ Test message from Railway bot');
-
       scheduleDailyMessage(sock);
     }
+
 
     if (connection === 'close') {
       const shouldReconnect =
