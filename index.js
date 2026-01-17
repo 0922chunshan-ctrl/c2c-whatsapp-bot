@@ -43,16 +43,20 @@ Make sure to place your orders before *3:00 PM* if you haven’t yet! 🍕🍔�
 ======================= */
 
 function getTodayType() {
-  const day = new Date().getDay();
+  const now = new Date();
+  const day = now.getDay();
+  const hour = now.getHours();
 
   // Reminder days
   if (day === 1) return 'TUE_REMINDER'; // Monday
   if (day === 4) return 'FRI_REMINDER'; // Thursday
-  if (day === 5) return 'SAT_REMINDER'; // Friday night handled by scheduler time
+
+  // Friday night ONLY (after 9 PM) → Saturday delivery
+  if (day === 5 && hour >= 21) return 'SAT_REMINDER';
 
   // Urgent delivery days
   if (day === 2) return 'TUE_URGENT';   // Tuesday
-  if (day === 5) return 'FRI_URGENT';   // Friday
+  if (day === 5 && hour < 15) return 'FRI_URGENT'; // Friday before cutoff
   if (day === 6) return 'SAT_URGENT';   // Saturday
 
   return null;
