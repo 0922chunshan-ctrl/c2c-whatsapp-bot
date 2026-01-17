@@ -1,10 +1,10 @@
+process.env.TZ = 'Asia/Kuala_Lumpur';
 const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason
 } = require('@whiskeysockets/baileys');
 
-const qrcode = require('qrcode-terminal');
 const path = require('path');
 
 /* =======================
@@ -34,7 +34,8 @@ https://crave2cave.vercel.app/`,
 `⏰ *1 HOUR LEFT!*
 
 Hey everyone! The *C2C system* will be closing in *1 hour* ⏳  
-Make sure to place your orders before *3:00 PM* if you haven’t yet! 🍕🍔🥤`
+Make sure to place your orders before *3:00 PM* if you haven’t yet! 🍕🍔🥤
+https://crave2cave.vercel.app/`
 };
 
 
@@ -97,70 +98,66 @@ async function sendImageMessage(sock, messageText) {
    SCHEDULER (STEP 5)
 ======================= */
 
+let sentFlags = {};
+
 function scheduleDailyMessage(sock) {
-  const now = new Date();
-  const target = new Date();
+  setInterval(async () => {
+    const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
 
-  let type = getTodayType();
+    const todayKey = `${day}-${hour}-${minute}`;
 
-  // Default reminder time → 10:25 AM
-target.setHours(10, 25, 0, 0);
-
-// Friday night reminder for Saturday delivery → 11:58 PM
-if (type === 'SAT_REMINDER') {
-  target.setHours(23, 58, 0, 0);
-}
-
-// Urgent reminders → 1:45 PM
-if (type === 'TUE_URGENT' || type === 'FRI_URGENT' || type === 'SAT_URGENT') {
-  target.setHours(13, 45, 0, 0);
-}
-
-  if (now > target) {
-    target.setDate(target.getDate() + 1);
-  }
-
-  const delay = target - now;
-
-  setTimeout(async () => {
     try {
-      const todayType = getTodayType();
-
-      // Monday → Tuesday delivery
-      if (todayType === 'TUE_REMINDER') {
-        const { dayName, dateStr } = getDeliveryInfo(2);
-        await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+      // 🟢 Monday 10:25 AM → Tuesday delivery
+      if (day === 1 && hour === 10 && minute === 25) {
+        if (!sentFlags[todayKey]) {
+          sentFlags[todayKey] = true;
+          const { dayName, dateStr } = getDeliveryInfo(2);
+          await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+          console.log('✅ Monday reminder sent');
+        }
       }
 
-      // Thursday → Friday delivery
-      if (todayType === 'FRI_REMINDER') {
-        const { dayName, dateStr } = getDeliveryInfo(5);
-        await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+      // 🟢 Thursday 10:25 AM → Friday delivery
+      if (day === 4 && hour === 10 && minute === 25) {
+        if (!sentFlags[todayKey]) {
+          sentFlags[todayKey] = true;
+          const { dayName, dateStr } = getDeliveryInfo(5);
+          await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+          console.log('✅ Thursday reminder sent');
+        }
       }
 
-      // Friday night → Saturday delivery
-      if (todayType === 'SAT_REMINDER') {
-        const { dayName, dateStr } = getDeliveryInfo(6);
-        await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+      // 🟢 Friday 11:58 PM → Saturday delivery
+      if (day === 5 && hour === 23 && minute === 58) {
+        if (!sentFlags[todayKey]) {
+          sentFlags[todayKey] = true;
+          const { dayName, dateStr } = getDeliveryInfo(6);
+          await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+          console.log('✅ Friday night reminder sent');
+        }
       }
 
-      // Urgent reminders
+      // 🔴 Urgent reminders (2:00 PM)
       if (
-        todayType === 'TUE_URGENT' ||
-        todayType === 'FRI_URGENT' ||
-        todayType === 'SAT_URGENT'
+        (day === 2 || day === 5 || day === 6) &&
+        hour === 14 &&
+        minute === 0
       ) {
-        await sendImageMessage(sock, messages.oneHourLeft());
+        if (!sentFlags[todayKey]) {
+          sentFlags[todayKey] = true;
+          await sendImageMessage(sock, messages.oneHourLeft());
+          console.log('⏰ Urgent reminder sent');
+        }
       }
 
     } catch (err) {
       console.error('❌ Send failed:', err.message);
     }
 
-    // Schedule next day
-    scheduleDailyMessage(sock);
-
-  }, delay);
+  }, 60 * 1000); // check every minute
 }
 
 /* =======================
