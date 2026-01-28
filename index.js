@@ -144,8 +144,10 @@ function scheduleDailyMessage(sock) {
       if (
         (day === 2 || day === 5 || day === 6) &&
         hour === 14 &&
-        minute === 0
+        minute >= 0 &&
+        minute <= 2
       ) {
+
         if (!sentFlags[todayKey]) {
           sentFlags[todayKey] = true;
           await sendImageMessage(sock, messages.oneHourLeft());
