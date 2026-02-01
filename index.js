@@ -43,26 +43,6 @@ https://crave2cave.vercel.app/`
    DAY LOGIC (STEP 3)
 ======================= */
 
-function getTodayType() {
-  const now = new Date();
-  const day = now.getDay();
-  const hour = now.getHours();
-
-  // Reminder days
-  if (day === 1) return 'TUE_REMINDER'; // Monday
-  if (day === 4) return 'FRI_REMINDER'; // Thursday
-
-  // Friday night ONLY (after 9 PM) → Saturday delivery
-  if (day === 5 && hour >= 21) return 'SAT_REMINDER';
-
-  // Urgent delivery days
-  if (day === 2) return 'TUE_URGENT';   // Tuesday
-  if (day === 5 && hour < 15) return 'FRI_URGENT'; // Friday before cutoff
-  if (day === 6) return 'SAT_URGENT';   // Saturday
-
-  return null;
-}
-
 function getDeliveryInfo(targetDay) {
   const today = new Date();
   const deliveryDate = new Date(today);
@@ -107,13 +87,19 @@ function scheduleDailyMessage(sock) {
     const hour = now.getHours();
     const minute = now.getMinutes();
 
-    const todayKey = `${day}-${hour}-${minute}`;
+    // Reset flags at 3:00 AM daily
+    if (hour === 3 && minute === 0) {
+      sentFlags = {};
+      console.log('♻️ Daily sentFlags reset');
+    }
 
     try {
       // 🟢 Monday 10:25 AM → Tuesday delivery
       if (day === 1 && hour === 10 && minute === 25) {
-        if (!sentFlags[todayKey]) {
-          sentFlags[todayKey] = true;
+        const key = 'MON_REMINDER';
+
+        if (!sentFlags[key]) {
+          sentFlags[key] = true;
           const { dayName, dateStr } = getDeliveryInfo(2);
           await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
           console.log('✅ Monday reminder sent');
@@ -122,8 +108,10 @@ function scheduleDailyMessage(sock) {
 
       // 🟢 Thursday 10:25 AM → Friday delivery
       if (day === 4 && hour === 10 && minute === 25) {
-        if (!sentFlags[todayKey]) {
-          sentFlags[todayKey] = true;
+        const key = 'THU_REMINDER';
+
+        if (!sentFlags[key]) {
+          sentFlags[key] = true;
           const { dayName, dateStr } = getDeliveryInfo(5);
           await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
           console.log('✅ Thursday reminder sent');
@@ -132,8 +120,10 @@ function scheduleDailyMessage(sock) {
 
       // 🟢 Friday 11:58 PM → Saturday delivery
       if (day === 5 && hour === 23 && minute === 58) {
-        if (!sentFlags[todayKey]) {
-          sentFlags[todayKey] = true;
+        const key = 'FRI_NIGHT_REMINDER';
+
+        if (!sentFlags[key]) {
+          sentFlags[key] = true;
           const { dayName, dateStr } = getDeliveryInfo(6);
           await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
           console.log('✅ Friday night reminder sent');
@@ -147,9 +137,10 @@ function scheduleDailyMessage(sock) {
         minute >= 0 &&
         minute <= 2
       ) {
+        const key = `${day}-URGENT`;
 
-        if (!sentFlags[todayKey]) {
-          sentFlags[todayKey] = true;
+        if (!sentFlags[key]) {
+          sentFlags[key] = true;
           await sendImageMessage(sock, messages.oneHourLeft());
           console.log('⏰ Urgent reminder sent');
         }
