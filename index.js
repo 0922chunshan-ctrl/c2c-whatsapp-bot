@@ -12,6 +12,7 @@ const express = require('express');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const qrcode = require('qrcode-terminal');
 
 // Simple dashboard / health-check for cron-job.org
 app.get('/ping', (req, res) => {
@@ -135,26 +136,36 @@ async function startBot() {
   await restoreSessionFromEnv();
 
   const { state, saveCreds } = await useMultiFileAuthState('auth');
-  const sock = makeWASocket({ auth: state });
+  const sock = makeWASocket({
+  auth: state,
+  printQRInTerminal: true,
+  browser: ['Ubuntu', 'Chrome', '20.0.04']
+  });
 
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
+  const { connection, lastDisconnect, qr } = update;
 
-    if (qr) console.log('📱 Scan QR code:', qr);
+  // Render QR code visually in Render logs
+  if (qr) {
+    console.log('⚡ SCAN THIS QR CODE WITH WHATSAPP:');
+    qrcode.generate(qr, { small: true });
+  }
 
-    if (connection === 'open') {
-      console.log('✅ WhatsApp connected');
-      scheduleDailyMessage(sock);
+  if (connection === 'open') {
+    console.log('✅ WhatsApp connected successfully!');
+    scheduleDailyMessage(sock);
+  }
+
+  if (connection === 'close') {
+    const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+    console.log('❌ Disconnected. Reconnecting:', shouldReconnect);
+    if (shouldReconnect) {
+      setTimeout(() => startBot(), 3000); // 3-second buffer prevents reconnect loops
     }
-
-    if (connection === 'close') {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log('❌ Disconnected. Reconnecting:', shouldReconnect);
-      if (shouldReconnect) startBot();
-    }
-  });
+  }
+});
 }
 
 startBot();
