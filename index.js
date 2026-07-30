@@ -1,52 +1,47 @@
 process.env.TZ = 'Asia/Kuala_Lumpur';
+
 const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason
 } = require('@whiskeysockets/baileys');
-
 const path = require('path');
+const fs = require('fs-extra'); // Installed for file operations
+const cron = require('node-cron');
+const express = require('express');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Simple dashboard / health-check for cron-job.org
+app.get('/ping', (req, res) => {
+  res.status(200).send('Crave 2 Cave Bot is awake!');
+});
+
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});
 
 /* =======================
-   CONFIG
+   CONFIG & TEMPLATES
 ======================= */
-
 const GROUP_ID = '120363419379282205@g.us';
 const IMAGE_PATH = path.join(__dirname, 'reminder.jpg');
 
-/* =======================
-   MESSAGE TEMPLATES
-======================= */
-
 const messages = {
   tueFriReminder: (day, dateStr) =>
-`Our delivery service will be available again on *${day}* (${dateStr}) 🚚✨
-You can start placing your orders from now until *3:00 PM* tomorrow for your favourite meals.
-
-*Kind reminders:*
-- Please set your pick-up time between *5:00 PM – 5:15 PM*
-- Collect your delivered food at *KY’s main gate*  
-  (wait for updates in the group)
-
-https://crave2cave.vercel.app/`,
+    `Our delivery service will be available again on *${day}* (${dateStr}) 🚚✨\nYou can start placing your orders from now until *3:00 PM* tomorrow for your favourite meals.\n\n*Kind reminders:*\n- Please set your pick-up time between *5:00 PM – 5:15 PM*\n- Collect your delivered food at *KY’s main gate*\n(wait for updates in the group)\n\nhttps://crave2cave.vercel.app/`,
 
   oneHourLeft: () =>
-`⏰ *1 HOUR LEFT!*
-
-Hey everyone! The *C2C system* will be closing in *1 hour* ⏳  
-Make sure to place your orders before *3:00 PM* if you haven’t yet! 🍕🍔🥤
-https://crave2cave.vercel.app/`
+    `⏰ *1 HOUR LEFT!*\n\nHey everyone! The *C2C system* will be closing in *1 hour* ⏳\nMake sure to place your orders before *3:00 PM* if you haven’t yet! 🍕🍔🥤\nhttps://crave2cave.vercel.app/`
 };
 
-
 /* =======================
-   DAY LOGIC (STEP 3)
+   DAY LOGIC & SEND
 ======================= */
-
 function getDeliveryInfo(targetDay) {
   const today = new Date();
   const deliveryDate = new Date(today);
-
   deliveryDate.setDate(today.getDate() + ((targetDay - today.getDay() + 7) % 7));
 
   const dayName = deliveryDate.toLocaleDateString('en-MY', { weekday: 'long' });
@@ -59,131 +54,104 @@ function getDeliveryInfo(targetDay) {
   return { dayName, dateStr };
 }
 
-
-/* =======================
-   SEND IMAGE + TEXT (STEP 4)
-======================= */
-
 async function sendImageMessage(sock, messageText) {
-  await sock.sendMessage(GROUP_ID, {
-    image: { url: IMAGE_PATH },
-    caption: messageText
-  });
-
-  console.log('📤 Image + message sent');
+  try {
+    await sock.sendMessage(GROUP_ID, {
+      image: { url: IMAGE_PATH },
+      caption: messageText
+    });
+    console.log('📤 Image + message sent');
+  } catch (err) {
+    console.error('❌ Send failed:', err.message);
+  }
 }
 
-
 /* =======================
-   SCHEDULER (STEP 5)
+   SCHEDULER
 ======================= */
-
-let sentFlags = {};
+let isSchedulerRunning = false;
 
 function scheduleDailyMessage(sock) {
-  setInterval(async () => {
-    const now = new Date();
-    const day = now.getDay();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
+  if (isSchedulerRunning) return;
+  isSchedulerRunning = true;
+  
+  console.log('🗓️ Scheduler initialized');
+  const tz = { timezone: "Asia/Kuala_Lumpur" };
 
-    // Reset flags at 3:00 AM daily
-    if (hour === 3 && minute === 0) {
-      sentFlags = {};
-      console.log('♻️ Daily sentFlags reset');
-    }
+  // Monday 10:25 AM -> Tuesday delivery
+  cron.schedule('25 10 * * 1', () => {
+    const { dayName, dateStr } = getDeliveryInfo(2);
+    sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+  }, tz);
 
-    try {
-      // 🟢 Monday 10:25 AM → Tuesday delivery
-      if (day === 1 && hour === 10 && minute === 25) {
-        const key = 'MON_REMINDER';
+  // Thursday 10:25 AM -> Friday delivery
+  cron.schedule('25 10 * * 4', () => {
+    const { dayName, dateStr } = getDeliveryInfo(5);
+    sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+  }, tz);
 
-        if (!sentFlags[key]) {
-          sentFlags[key] = true;
-          const { dayName, dateStr } = getDeliveryInfo(2);
-          await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
-          console.log('✅ Monday reminder sent');
-        }
-      }
+  // Friday 11:58 PM -> Saturday delivery
+  cron.schedule('58 23 * * 5', () => {
+    const { dayName, dateStr } = getDeliveryInfo(6);
+    sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
+  }, tz);
 
-      // 🟢 Thursday 10:25 AM → Friday delivery
-      if (day === 4 && hour === 10 && minute === 25) {
-        const key = 'THU_REMINDER';
-
-        if (!sentFlags[key]) {
-          sentFlags[key] = true;
-          const { dayName, dateStr } = getDeliveryInfo(5);
-          await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
-          console.log('✅ Thursday reminder sent');
-        }
-      }
-
-      // 🟢 Friday 11:58 PM → Saturday delivery
-      if (day === 5 && hour === 23 && minute === 58) {
-        const key = 'FRI_NIGHT_REMINDER';
-
-        if (!sentFlags[key]) {
-          sentFlags[key] = true;
-          const { dayName, dateStr } = getDeliveryInfo(6);
-          await sendImageMessage(sock, messages.tueFriReminder(dayName, dateStr));
-          console.log('✅ Friday night reminder sent');
-        }
-      }
-
-      // 🔴 Urgent reminders (2:00 PM)
-      if (
-        (day === 2 || day === 5 || day === 6) &&
-        hour === 14 &&
-        minute >= 0 &&
-        minute <= 2
-      ) {
-        const key = `${day}-URGENT`;
-
-        if (!sentFlags[key]) {
-          sentFlags[key] = true;
-          await sendImageMessage(sock, messages.oneHourLeft());
-          console.log('⏰ Urgent reminder sent');
-        }
-      }
-
-    } catch (err) {
-      console.error('❌ Send failed:', err.message);
-    }
-
-  }, 60 * 1000); // check every minute
+  // Urgent reminders (2:00 PM) on Tue, Fri, Sat
+  cron.schedule('0 14 * * 2,5,6', () => {
+    sendImageMessage(sock, messages.oneHourLeft());
+  }, tz);
 }
 
 /* =======================
-   START BOT (STEP 6)
+   SESSION RESTORE HELPER
 ======================= */
+async function restoreSessionFromEnv() {
+  const authPath = path.join(__dirname, 'auth');
+  const sessionBase64 = process.env.SESSION_DATA;
 
+  // If local auth folder doesn't exist BUT environment variable exists, restore it!
+  if (sessionBase64 && !fs.existsSync(authPath)) {
+    console.log('📦 Restoring WhatsApp session from Environment Variables...');
+    try {
+      const jsonString = Buffer.from(sessionBase64, 'base64').toString('utf-8');
+      const files = JSON.parse(jsonString);
+      
+      await fs.ensureDir(authPath);
+      for (const [fileName, fileContent] of Object.entries(files)) {
+        await fs.writeFile(path.join(authPath, fileName), fileContent);
+      }
+      console.log('✅ Session restored successfully!');
+    } catch (err) {
+      console.error('❌ Failed to restore session from env:', err.message);
+    }
+  }
+}
+
+/* =======================
+   START BOT
+======================= */
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('auth');
+  // Restore session if available before reading auth
+  await restoreSessionFromEnv();
 
+  const { state, saveCreds } = await useMultiFileAuthState('auth');
   const sock = makeWASocket({ auth: state });
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', async (update) => {
+  sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    if (qr) {
-      console.log('📱 Scan QR code:');
-      console.log('🔗 QR STRING (copy this):');
-      console.log(qr);
-    }
+    if (qr) console.log('📱 Scan QR code:', qr);
 
     if (connection === 'open') {
       console.log('✅ WhatsApp connected');
       scheduleDailyMessage(sock);
     }
 
-
     if (connection === 'close') {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-
-      console.log('❌ Disconnected. Reconnect:', shouldReconnect);
+      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log('❌ Disconnected. Reconnecting:', shouldReconnect);
       if (shouldReconnect) startBot();
     }
   });
